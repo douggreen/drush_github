@@ -12,7 +12,7 @@ function github_drush_command() {
   $items = [];
 
   // Entity type commands
-  $items['github-list'] = [
+  $items['github'] = [
     'description' => 'List details of repositories',
     'options' => [
       'oauth' => 'Oauth token, if missing must be in ~/.drush/.github',
@@ -30,7 +30,6 @@ function github_drush_command() {
       'hublist --repos="_profile$" --clone' => 'Clone my organizations repos whose name matches "_profile$"',
       'hublist --repos="_profile$" --search="_AH"' => 'Search my organizations matching repos for string "_AH"',
     ],
-    'aliases' => ['hublist'],
     'bootstrap' => DRUSH_BOOTSTRAP_NONE,
     'engines' => [
       'outputformat' => [
@@ -47,7 +46,7 @@ function github_drush_command() {
 /**
  * Drush callback function to list github repositories.
  */
-function drush_github_list() {
+function drush_github() {
   $oauth = drush_get_option('oauth');
   if (!$oauth) {
     $home = getenv('HOME');
@@ -88,10 +87,10 @@ function drush_github_list() {
     $clone = drush_get_option('clone');
     $search = drush_get_option('search');
     if ($clone || $search) {
-      $output = _drush_github_list_clone($results, $org, $search);
+      $output = _drush_github_clone($results, $org, $search);
     }
     else {
-      $output = _drush_github_list($results, $oauth);
+      $output = _drush_github($results, $oauth);
     }
 
     return $output;
@@ -108,7 +107,7 @@ function drush_github_list() {
  * @param string $search
  *   String to search for.
  */
-function _drush_github_list_clone($json, $org, $search) {
+function _drush_github_clone($json, $org, $search) {
   $output = [];
 
   // Get the cache directory.
@@ -157,7 +156,7 @@ function _drush_github_list_clone($json, $org, $search) {
  * @param string $oauth
  *   The Oauth token.
  */
-function _drush_github_list($json, $oauth) {
+function _drush_github($json, $oauth) {
   $output = [];
 
   $list = drush_get_option('list');
@@ -190,7 +189,7 @@ function _drush_github_list($json, $oauth) {
       // If the result is a single value URL, retrieve it too.
       if (substr($key,-4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
         $value = [
-          $value => _drush_github_list_url($value, $oauth),
+          $value => _drush_github_url($value, $oauth),
         ];
       }
 
@@ -215,7 +214,7 @@ function _drush_github_list($json, $oauth) {
  * @return array
  *   The results retrieved from the API call.
  */
-function _drush_github_list_url($url, $oauth) {
+function _drush_github_url($url, $oauth) {
   // Strip existing https://api.github.com/ from the URL.
   $url = str_replace('https://api.github.com/', '', $url);
 

@@ -19,49 +19,49 @@ Use ```drush help github``` for all usage options.
 Search for all references to AH_ on my organization's repositories named "*_profile", ignoring errors.
 
 ```
-drush github-list --org=pfizer --repos='_profile$' --search=AH_ 2>/dev/null
+drush github --org=pfizer --repos='_profile$' --search=AH_ 2>/dev/null
 ```
 
 List all my organizations repositories, showing the name and description.
 
 ```
-drush github-list
+drush github
 ```
 
 List my organizations repositories named "*-8", as an associative array whose value is the clone url.
 
 ```
-drush github-list --repos='-8$'
+drush github --repos='-8$'
 ```
 
 Clone all my organizations repositories, displaying errors.
 
 ```
-drush github-list --clone
+drush github --clone
 ```
 
 List all my organizations repositories, showing all available information.
 
 ```
-drush github-list --list=all
+drush github --list=all
 ```
 
 List all information about my organizations tagged releases.
 
 ```
-drush github-list --list=tags_url
+drush github --list=tags_url
 ```
 
 List all information about my organizations branches on repositories named "*_profile".
 
 ```
-drush github-list --repos='_profile$' --list=branches_url
+drush github --repos='_profile$' --list=branches_url
 ```
 
 Search my organizations repositories named *_profile for "webform_encrypt:".
 
 ```
-drush github-list --repos='_profile$' --search='webform_encrypt:'
+drush github --repos='_profile$' --search='webform_encrypt:'
 ```
 
 # See also
