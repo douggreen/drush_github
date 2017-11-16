@@ -20,7 +20,7 @@ Search for all references to AH_ on my organization's repositories named *_profi
 drush github-list --org=pfizer --repos='_profile$' --search=AH_ 2>/dev/null
 ```
 
-List all my organizations repositories
+List all my organizations repositories, showing the name and description.
 
 ```
 drush github-list
@@ -36,6 +36,21 @@ Clone all my organizations repositories, displaying errors.
 
 ```
 drush github-list --clone
+```
+
+List all my organizations repositories, showing all available information.
+```
+drush github-list --list=all
+```
+
+List all information about my organizations tagged releases.
+```
+drush github-list --list=tags_url
+```
+
+List all information about my organizations branches on repositories named *_profile.
+```
+drush github-list --repos='_profile' --list=branches_url
 ```
 
 # See also

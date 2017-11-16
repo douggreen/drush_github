@@ -18,6 +18,8 @@ function github_drush_command() {
       'oauth' => 'Oauth token, if missing must be in ~/.drush/.github',
       'org' => 'Organization',
       'repos' => 'Repos name to match',
+      'branch' => 'The branch',
+      'list' => 'List the fields (this is the default action list=description, use list=all for all fields)',
       'clone' => 'Flag to Clone the repos',
       'search' => 'Flag to Search (and clone) the repos',
     ],
@@ -39,10 +41,9 @@ function github_drush_command() {
  * Drush callback function to list github repositories.
  */
 function drush_github_list() {
-  $home = getenv('HOME');
-
   $oauth = drush_get_option('oauth');
   if (!$oauth) {
+    $home = getenv('HOME');
     $oauth = trim(@file_get_contents("$home/.drush/.github"));
     if (!$oauth) {
       return drush_set_error(dt('Missing oauth'));
@@ -67,12 +68,12 @@ function drush_github_list() {
 
   $json = _drush_github_get_api("orgs/$org/repos", $oauth);
   if ($json) {
-    // Parse the results for the actions.
+    // Filter the repos.
     $results = [];
     foreach ($json as $repo) {
       $name = $repo['name'];
       if (!$repos || preg_match("/$repos/", $name)) {
-        $results[$name] = str_replace('https://github.com/', 'git@github.com:', $repo['clone_url']);
+        $results[] = $repo;
       }
     }
 
@@ -80,36 +81,145 @@ function drush_github_list() {
     $clone = drush_get_option('clone');
     $search = drush_get_option('search');
     if ($clone || $search) {
-      // Get the cache directory.
-      $cache_dir = drush_directory_cache("github/$org");
+      _drush_github_list_clone($results, $org, $search);
+    }
+    else {
+      _drush_github_list($results, $oauth);
+    }
+  }
+}
 
-      // For each matching repo, handle the action.
-      foreach ($results as $repo_name => $clone_url) {
-        // Clone or pull the latest code.
-        $cache_repo = "$cache_dir/$repo_name";
-        if (is_dir($cache_repo)) {
-          if (!_drush_github_shell_exec('cd %s; git pull', $cache_repo)) {
-            drush_set_error(dt('Cannot git pull %repo', ['%repo' => $cache_repo]));
-            continue;
-          }
-        }
-        else {
-          if (!_drush_github_shell_exec('cd %s; git clone %s %s', $cache_dir, $clone_url, $repo_name)) {
-            drush_set_error(dt('Cannot git clone %url', ['%url' => $clone_url]));
-            continue;
-          }
-        }
+/**
+ * Clone and or search the repo.
+ *
+ * @param array $json
+ *   The API results.
+ * @param string $org
+ *   The organization.
+ * @param string $search
+ *   String to search for.
+ */
+function _drush_github_list_clone($json, $org, $search) {
+  // Get the cache directory.
+  $cache_dir = drush_directory_cache("github/$org");
 
-        // Search the repo.
-        if ($search) {
-          _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $search, $repo_name, ['print' => TRUE]);
-        }
+  // For each matching repo, handle the action.
+  foreach ($json as $repo) {
+    $repo_name = $repo['name'];
+    $clone_url = str_replace('https://github.com/', 'git@github.com:', $repo['clone_url']);
+
+    // Clone or pull the latest code.
+    $cache_repo = "$cache_dir/$repo_name";
+    if (is_dir($cache_repo)) {
+      if (!_drush_github_shell_exec('cd %s; git pull', $cache_repo)) {
+        drush_set_error(dt('Cannot git pull %repo', ['%repo' => $cache_repo]));
+        continue;
       }
     }
     else {
-      drush_print_r($results);
+      if (!_drush_github_shell_exec('cd %s; git clone %s %s', $cache_dir, $clone_url, $repo_name)) {
+        drush_set_error(dt('Cannot git clone %url', ['%url' => $clone_url]));
+        continue;
+      }
+    }
+
+    // Search the repo.
+    if ($search) {
+      _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $search, $repo_name, ['print' => TRUE]);
     }
   }
+}
+
+/**
+ * List the results.
+ *
+ * @param array $json
+ *   The API results.
+ * @param string $oauth
+ *   The Oauth token.
+ */
+function _drush_github_list($json, $oauth) {
+  $list = drush_get_option('list');
+  if (!$list) {
+    $list = ['description'];
+  }
+  elseif ($list != 'all') {
+    $list = explode(',', $list);
+  }
+
+  // Parse the results for the actions.
+  $results = [];
+  foreach ($json as $repo) {
+    $name = $repo['name'];
+    $result = [];
+
+    $field_names = is_array($list) ? $list : array_keys($repo);
+    foreach ($field_names as $field_name) {
+      $value = $repo[$field_name];
+      if ($field_name == 'clone_url') {
+        $value = str_replace('https://github.com/', 'git@github.com:', $value);
+      }
+      $result[$field_name] = $value;
+    }
+
+    if (count($result) == 1) {
+      // Get the result key and value.
+      $key = reset($list);
+      $value = reset($result);
+
+      // If the result is a single value URL, retrieve it too.
+      if (substr($key,-4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
+        $value = [
+          $value => _drush_github_list_url($value, $oauth),
+        ];
+      }
+
+      // Save the single result.
+      $results[$name] = $value;
+    }
+    else {
+      // Save the multiple results.
+      $results[$name] = $result;
+    }
+  }
+
+  drush_print_r($results);
+}
+
+/**
+ * @param string $url
+ *   The API call to make.
+ * @param string $oauth
+ *   The Oauth token.
+ *
+ * @return array
+ *   The results retrieved from the API call.
+ */
+function _drush_github_list_url($url, $oauth) {
+  // Strip existing https://api.github.com/ from the URL.
+  $url = str_replace('https://api.github.com/', '', $url);
+
+  // Strip optional pattern replacements such as {branch} from the URL.
+  $url = preg_replace('/\{[^}]*\}/', '', $url);
+
+  // Retrieve the URL from the API.
+  $json = _drush_github_get_api($url, $oauth);
+
+  // Format the results.
+  $values = [];
+  foreach ($json as $result) {
+    if (!empty($result['name'])) {
+      $name = $result['name'];
+      $values[$name] = $result;
+    }
+    else {
+      $values[] = $result;
+    }
+    $values[$name] = $result;
+  }
+
+  // Return the values.
+  return $values;
 }
 
 /**
