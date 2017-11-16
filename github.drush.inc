@@ -81,7 +81,7 @@ function drush_github_list() {
     $search = drush_get_option('search');
     if ($clone || $search) {
       // Get the cache directory.
-      $cache_dir = drush_directory_cache('github');
+      $cache_dir = drush_directory_cache("github/$org");
 
       // For each matching repo, handle the action.
       foreach ($results as $repo_name => $clone_url) {
@@ -208,7 +208,7 @@ function _drush_github_shell_exec() {
   // print the output.
   $print = isset($options['print']);
   $verbose = drush_get_context('DRUSH_VERBOSE');
-  if ($print || $verbose) {
+  if (($print || $verbose) && $output) {
     $label = $print ? '' : 'Output: ';
     drush_print($label . implode("\n$label", $output));
   }

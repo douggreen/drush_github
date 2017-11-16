@@ -12,6 +12,32 @@ The token can be placed in a file ~/.drush/.github or specified on the command l
 
 Use ```drush help github``` for all usage options.
 
+# Examples
+
+Search for all references to AH_ on my organization's repositories named *_profile, ignoring errors.
+
+```
+drush github-list --org=pfizer --repos='_profile$' --search=AH_ 2>/dev/null
+```
+
+List all my organizations repositories
+
+```
+drush github-list
+```
+
+List my organizations repositories named *-8, as an associative array whose value is the clone url.
+
+```
+drush github-list --repos='-8$'
+```
+
+Clone all my organizations repositories, displaying errors.
+
+```
+drush github-list --clone
+```
+
 # See also
 
 * https://github.com/github/hub
