@@ -32,6 +32,13 @@ function github_drush_command() {
     ],
     'aliases' => ['hublist'],
     'bootstrap' => DRUSH_BOOTSTRAP_NONE,
+    'engines' => [
+      'outputformat' => [
+        'default' => 'json',
+        'pipe-format' => 'json',
+      ],
+    ],
+
   ];
 
   return $items;
@@ -81,11 +88,13 @@ function drush_github_list() {
     $clone = drush_get_option('clone');
     $search = drush_get_option('search');
     if ($clone || $search) {
-      _drush_github_list_clone($results, $org, $search);
+      $output = _drush_github_list_clone($results, $org, $search);
     }
     else {
-      _drush_github_list($results, $oauth);
+      $output = _drush_github_list($results, $oauth);
     }
+
+    return $output;
   }
 }
 
@@ -100,6 +109,8 @@ function drush_github_list() {
  *   String to search for.
  */
 function _drush_github_list_clone($json, $org, $search) {
+  $output = [];
+
   // Get the cache directory.
   $cache_dir = drush_directory_cache("github/$org");
 
@@ -125,9 +136,17 @@ function _drush_github_list_clone($json, $org, $search) {
 
     // Search the repo.
     if ($search) {
-      _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $search, $repo_name, ['print' => TRUE]);
+      _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $search, $repo_name);
+
+      // Save the results.
+      $search_output = drush_shell_exec_output();
+      if ($search_output) {
+        $output[$repo_name] = $search_output;
+      }
     }
   }
+
+  return $output;
 }
 
 /**
@@ -139,6 +158,8 @@ function _drush_github_list_clone($json, $org, $search) {
  *   The Oauth token.
  */
 function _drush_github_list($json, $oauth) {
+  $output = [];
+
   $list = drush_get_option('list');
   if (!$list) {
     $list = ['description'];
@@ -148,7 +169,6 @@ function _drush_github_list($json, $oauth) {
   }
 
   // Parse the results for the actions.
-  $results = [];
   foreach ($json as $repo) {
     $name = $repo['name'];
     $result = [];
@@ -175,15 +195,15 @@ function _drush_github_list($json, $oauth) {
       }
 
       // Save the single result.
-      $results[$name] = $value;
+      $output[$name] = $value;
     }
     else {
       // Save the multiple results.
-      $results[$name] = $result;
+      $output[$name] = $result;
     }
   }
 
-  drush_print_r($results);
+  return $output;
 }
 
 /**
@@ -297,9 +317,6 @@ function _drush_github_get_api($url, $oauth) {
  *   The command to execute. May include placeholders used for sprintf.
  * @param ...
  *   Values for the placeholders specified in $cmd. Each of these will be passed through escapeshellarg() to ensure they are safe to use on the command line.
- * @param $options
- *   If the last argument is an array, then it is a set of options
- *   - print: always print results.
  *
  * @return int
  *   The shell exit code.
@@ -307,7 +324,6 @@ function _drush_github_get_api($url, $oauth) {
 function _drush_github_shell_exec() {
   // Get the arguments.
   $args = func_get_args();
-  $options = is_array(end($args)) ? array_pop($args) : [];
 
   // Execute the command.
   $exit_code = _drush_shell_exec($args);
@@ -316,10 +332,9 @@ function _drush_github_shell_exec() {
   $output = drush_shell_exec_output();
 
   // print the output.
-  $print = isset($options['print']);
   $verbose = drush_get_context('DRUSH_VERBOSE');
-  if (($print || $verbose) && $output) {
-    $label = $print ? '' : 'Output: ';
+  if ($verbose && $output) {
+    $label = 'Output: ';
     drush_print($label . implode("\n$label", $output));
   }
 
