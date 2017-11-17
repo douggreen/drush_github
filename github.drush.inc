@@ -122,13 +122,13 @@ function _drush_github_clone($json, $org, $search) {
     $cache_repo = "$cache_dir/$repo_name";
     if (is_dir($cache_repo)) {
       if (!_drush_github_shell_exec('cd %s; git pull', $cache_repo)) {
-        drush_set_error(dt('Cannot git pull %repo', ['%repo' => $cache_repo]));
+        drush_print(dt('Cannot git pull %repo', ['%repo' => $cache_repo]), 0, STDERR);
         continue;
       }
     }
     else {
       if (!_drush_github_shell_exec('cd %s; git clone %s %s', $cache_dir, $clone_url, $repo_name)) {
-        drush_set_error(dt('Cannot git clone %url', ['%url' => $clone_url]));
+        drush_print(dt('Cannot git clone %url', ['%url' => $clone_url]), 0, STDERR);
         continue;
       }
     }
