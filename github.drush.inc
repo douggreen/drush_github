@@ -87,11 +87,19 @@ function drush_github() {
     $clone = drush_get_option('clone');
     $search = drush_get_option('search');
     $branch = drush_get_option('branch');
-    if ($clone || $search) {
+    $list = drush_get_option('list');
+    if (!$list && ($clone || $search)) {
       $output = _drush_github_clone($results, $org, $branch, $search);
     }
     else {
-      $output = _drush_github($results, $oauth);
+      if (!$list) {
+        $list = ['description'];
+      }
+      elseif ($list != 'all') {
+        $list = explode(',', $list);
+      }
+
+      $output = _drush_github($results, $oauth, $list, $search);
     }
 
     return $output;
@@ -161,17 +169,13 @@ function _drush_github_clone($json, $org, $branch, $search) {
  *   The API results.
  * @param string $oauth
  *   The Oauth token.
+ * @param array $list
+ *   List of field names.
+ * @param string $search
+ *   String to search for.
  */
-function _drush_github($json, $oauth) {
+function _drush_github($json, $oauth, $list, $search) {
   $output = [];
-
-  $list = drush_get_option('list');
-  if (!$list) {
-    $list = ['description'];
-  }
-  elseif ($list != 'all') {
-    $list = explode(',', $list);
-  }
 
   // Parse the results for the actions.
   foreach ($json as $repo) {
@@ -194,8 +198,19 @@ function _drush_github($json, $oauth) {
 
       // If the result is a single value URL, retrieve it too.
       if (substr($key,-4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
+        $url_values = _drush_github_url($value, $oauth);
+        if ($search) {
+          foreach ($url_values as $url_key => $url_value) {
+            if (!preg_match("/$search/", $url_key)) {
+              unset($url_values[$url_key]);
+            }
+          }
+          if (!$url_values) {
+            continue;
+          }
+        }
         $value = [
-          $value => _drush_github_url($value, $oauth),
+          $value => $url_values,
         ];
       }
 
