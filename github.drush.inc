@@ -86,8 +86,9 @@ function drush_github() {
     // Perform actions.
     $clone = drush_get_option('clone');
     $search = drush_get_option('search');
+    $branch = drush_get_option('branch');
     if ($clone || $search) {
-      $output = _drush_github_clone($results, $org, $search);
+      $output = _drush_github_clone($results, $org, $branch, $search);
     }
     else {
       $output = _drush_github($results, $oauth);
@@ -104,10 +105,12 @@ function drush_github() {
  *   The API results.
  * @param string $org
  *   The organization.
+ * @param string $branch
+ *   The branch.
  * @param string $search
  *   String to search for.
  */
-function _drush_github_clone($json, $org, $search) {
+function _drush_github_clone($json, $org, $branch, $search) {
   $output = [];
 
   // Get the cache directory.
@@ -118,19 +121,22 @@ function _drush_github_clone($json, $org, $search) {
     $repo_name = $repo['name'];
     $clone_url = str_replace('https://github.com/', 'git@github.com:', $repo['clone_url']);
 
-    // Clone or pull the latest code.
+    // Clone the latest code (if it's not already cloned).
     $cache_repo = "$cache_dir/$repo_name";
-    if (is_dir($cache_repo)) {
-      if (!_drush_github_shell_exec('cd %s; git pull', $cache_repo)) {
-        drush_print(dt('Cannot git pull %repo', ['%repo' => $cache_repo]), 0, STDERR);
-        continue;
-      }
+    if (!is_dir($cache_repo) && !_drush_github_shell_exec('cd %s; git clone %s %s', $cache_dir, $clone_url, $repo_name)) {
+      drush_print(dt('%repo: Cannot git clone %url', ['%url' => $clone_url, '%repo' => $repo_name]), 0, STDERR);
+      continue;
     }
-    else {
-      if (!_drush_github_shell_exec('cd %s; git clone %s %s', $cache_dir, $clone_url, $repo_name)) {
-        drush_print(dt('Cannot git clone %url', ['%url' => $clone_url]), 0, STDERR);
-        continue;
-      }
+
+    // Checkout the branch.
+    $default_branch = $branch ? $branch : $repo['default_branch'];
+    if (!_drush_github_shell_exec('cd %s; git checkout %s', $cache_repo, $default_branch) && !_drush_github_shell_exec('cd %s; git checkout -b %s origin/%s', $cache_repo, $default_branch, $default_branch)) {
+      drush_print(dt('%repo: Cannot git checkout %branch', ['%repo' => $repo_name, '%branch' => $default_branch]), 0, STDERR);
+      continue;
+    }
+    if (!_drush_github_shell_exec('cd %s; git pull origin %s', $cache_repo, $default_branch)) {
+      drush_print(dt('%repo: Cannot git pull origin %branch', ['%repo' => $repo_name, '%branch' => $default_branch]), 0, STDERR);
+      continue;
     }
 
     // Search the repo.
