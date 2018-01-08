@@ -24,11 +24,11 @@ function github_drush_command() {
       'search' => 'Flag to Search (and clone) the repos',
     ],
     'examples' => [
-      'github-repos-list' => 'List available repositories',
-      'hublist --org=widget' => 'List available repositories for my organization named "widget"',
-      'hublist --org=widget --repos="_profile$"' => 'List available repositories for my organization named "widget" whose name matches "_profile$"',
-      'hublist --repos="_profile$" --clone' => 'Clone my organizations repos whose name matches "_profile$"',
-      'hublist --repos="_profile$" --search="_AH"' => 'Search my organizations matching repos for string "_AH"',
+      'github' => 'List available repositories',
+      'github --org=widget' => 'List available repositories for my organization named "widget"',
+      'github --org=widget --repos="_profile$"' => 'List available repositories for my organization named "widget" whose name matches "_profile$"',
+      'github --repos="_profile$" --clone' => 'Clone my organizations repos whose name matches "_profile$"',
+      'github --repos="_profile$" --search="_AH"' => 'Search my organizations matching repos for string "_AH"',
     ],
     'bootstrap' => DRUSH_BOOTSTRAP_NONE,
     'engines' => [
