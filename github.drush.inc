@@ -185,19 +185,15 @@ function _drush_github($json, $oauth, $list, $search) {
     $field_names = is_array($list) ? $list : array_keys($repo);
     foreach ($field_names as $field_name) {
       $value = $repo[$field_name];
+
+      // Replace HTTPS clone URL with ssh clone URL.
       if ($field_name == 'clone_url') {
         $value = str_replace('https://github.com/', 'git@github.com:', $value);
       }
-      $result[$field_name] = $value;
-    }
 
-    if (count($result) == 1) {
-      // Get the result key and value.
-      $key = reset($list);
-      $value = reset($result);
-
-      // If the result is a single value URL, retrieve it too.
-      if (substr($key,-4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
+      // If the result is a URL that was specified in the list command line,
+      // retrieve it too.
+      if ($list !== 'all' && substr($field_name, -4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
         $url_values = _drush_github_url($value, $oauth);
         if ($search) {
           foreach ($url_values as $url_key => $url_value) {
@@ -214,12 +210,12 @@ function _drush_github($json, $oauth, $list, $search) {
         ];
       }
 
-      // Save the single result.
-      $output[$name] = $value;
-    }
-    else {
-      // Save the multiple results.
-      $output[$name] = $result;
+      if (count($field_names) == 1) {
+        $output[$name] = $value;
+      }
+      else {
+        $output[$name][$field_name] = $value;
+      }
     }
   }
 
