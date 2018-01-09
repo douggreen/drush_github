@@ -20,15 +20,18 @@ function github_drush_command() {
       'repos' => 'Repos name to match',
       'branch' => 'The branch',
       'list' => 'List the fields (this is the default action list=description, use list=all for all fields)',
+      'filter' => 'Filter results based on matching field values (field:value), comma separated',
       'clone' => 'Flag to Clone the repos',
-      'search' => 'Flag to Search (and clone) the repos',
+      'grep' => 'Flag to Search (and clone) the repos',
     ],
     'examples' => [
       'github' => 'List available repositories',
-      'github --org=widget' => 'List available repositories for my organization named "widget"',
-      'github --org=widget --repos="_profile$"' => 'List available repositories for my organization named "widget" whose name matches "_profile$"',
+      'github --org=example' => 'List available repositories for my organization named "example"',
+      'github --org=example --repos="_profile$"' => 'List available repositories for my organization named "example" whose name matches "_profile$"',
       'github --repos="_profile$" --clone' => 'Clone my organizations repos whose name matches "_profile$"',
-      'github --repos="_profile$" --search="_AH"' => 'Search my organizations matching repos for string "_AH"',
+      'github --repos="_profile$" --grep="_AH"' => 'Search my organizations matching repos for string "_AH"',
+      'github --repos="-8$" --list=subscribers_url' => 'List the subscribers details for repos whose name matches "-8$"',
+      'github --repos="-8$" --list=subscribers_url --filter="login:douggreen"' => 'List the subscribers details for repos whose name matches "-8$" and whos login field matches "douggreen"',
     ],
     'bootstrap' => DRUSH_BOOTSTRAP_NONE,
     'engines' => [
@@ -85,11 +88,11 @@ function drush_github() {
 
     // Perform actions.
     $clone = drush_get_option('clone');
-    $search = drush_get_option('search');
+    $grep = drush_get_option('grep');
     $branch = drush_get_option('branch');
     $list = drush_get_option('list');
-    if (!$list && ($clone || $search)) {
-      $output = _drush_github_clone($results, $org, $branch, $search);
+    if (!$list && ($clone || $grep)) {
+      $output = _drush_github_clone($results, $org, $branch, $grep);
     }
     else {
       if (!$list) {
@@ -99,7 +102,18 @@ function drush_github() {
         $list = explode(',', $list);
       }
 
-      $output = _drush_github($results, $oauth, $list, $search);
+      $filters = array();
+      $filter_options = drush_get_option('filter');
+      if ($filter_options) {
+        foreach (explode(',', $filter_options) as $filter) {
+          list($key, $value) = explode(':', $filter);
+          $filters[] = [
+            'keys' => explode('.', $key),
+            'value' => $value,
+          ];
+        }
+      }
+      $output = _drush_github($results, $oauth, $list, $filters);
     }
 
     return $output;
@@ -115,10 +129,10 @@ function drush_github() {
  *   The organization.
  * @param string $branch
  *   The branch.
- * @param string $search
- *   String to search for.
+ * @param string $grep
+ *   String to search (grep) for.
  */
-function _drush_github_clone($json, $org, $branch, $search) {
+function _drush_github_clone($json, $org, $branch, $grep) {
   $output = [];
 
   // Get the cache directory.
@@ -148,13 +162,13 @@ function _drush_github_clone($json, $org, $branch, $search) {
     }
 
     // Search the repo.
-    if ($search) {
-      _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $search, $repo_name);
+    if ($grep) {
+      _drush_github_shell_exec('cd %s; grep --exclude-dir .git -r "%s" %s', $cache_dir, $grep, $repo_name);
 
       // Save the results.
-      $search_output = drush_shell_exec_output();
-      if ($search_output) {
-        $output[$repo_name] = $search_output;
+      $grep_output = drush_shell_exec_output();
+      if ($grep_output) {
+        $output[$repo_name] = $grep_output;
       }
     }
   }
@@ -169,12 +183,15 @@ function _drush_github_clone($json, $org, $branch, $search) {
  *   The API results.
  * @param string $oauth
  *   The Oauth token.
- * @param array $list
- *   List of field names.
- * @param string $search
- *   String to search for.
+ * @param array|string $list
+ *   Array of field names. If a string, it must be 'all'.
+ * @param array $filters
+ *   Keyed array of field names and values to filter on.
+ *
+ * @return array
+ *   Output array.
  */
-function _drush_github($json, $oauth, $list, $search) {
+function _drush_github($json, $oauth, $list, array $filters) {
   $output = [];
 
   // Parse the results for the actions.
@@ -194,27 +211,51 @@ function _drush_github($json, $oauth, $list, $search) {
       // If the result is a URL that was specified in the list command line,
       // retrieve it too.
       if ($list !== 'all' && substr($field_name, -4) == '_url' && strpos($value, 'https://api.github.com/') !== FALSE) {
-        $url_values = _drush_github_url($value, $oauth);
-        if ($search) {
-          foreach ($url_values as $url_key => $url_value) {
-            if (!preg_match("/$search/", $url_key)) {
-              unset($url_values[$url_key]);
-            }
-          }
-          if (!$url_values) {
-            continue;
-          }
-        }
-        $value = [
-          $value => $url_values,
-        ];
+        $value = array('_src' => $value, '_values' => _drush_github_url($value, $oauth));
       }
 
-      if (count($field_names) == 1) {
-        $output[$name] = $value;
+      $output[$name][$field_name] = $value;
+    }
+  }
+
+  // @todo: Filter out results that don't match.
+  foreach ($output as $name => &$values) {
+    $ref = &$values;
+    foreach ($filters as $filter) {
+      foreach ($filter['keys'] as $filter_key) {
+        if (!is_array($ref)) {
+          break;
+        }
+
+        if (isset($ref['_src'])) {
+          foreach ($ref['_values'] as $x => $y) {
+            if (isset($y[$filter_key]) && $y[$filter_key] != $filter['value']) {
+              unset($ref['_values'][$x]);
+            }
+          }
+          if (!$ref['_values']) {
+            unset($output[$name]);
+            break 2;
+          }
+          break;
+        }
+
+        if (isset($ref[$filter_key])) {
+          $ref = &$ref[$filter_key];
+        }
+        else {
+          break;
+        }
       }
-      else {
-        $output[$name][$field_name] = $value;
+    }
+  }
+
+  // Flatten the results, for the case that there is only one field returned.
+  foreach ($output as $name => $values) {
+    foreach ($values as $x => $y) {
+      if (isset($y['_src']) && isset($y['_values'])) {
+        unset($output[$name][$x]);
+        $output[$name][$y['_src']] = $y['_values'];
       }
     }
   }
